@@ -34,52 +34,15 @@ async def upload_email(
     attachments: List[UploadFile] = File([]),
     db = Depends(get_db)
 ):
-    print("\n" + "="*80)
-    print("📧 이메일 업로드 요청 받음")
-    print("="*80)
-    print(f"발신자: {from_email}")
-    print(f"수신자: {to_email}")
-    print(f"제목: {subject}")
-    print(f"본문 길이: {len(original_body)} 자")
-    print(f"첨부파일: {len(attachments)}개")
-    print("="*80 + "\n")
+    print(f"📧 이메일 업로드: {from_email} → {to_email} | 첨부파일: {len(attachments)}개")
 
-    # 폴더 내용물 삭제 로직
-    if os.path.exists(UPLOAD_DIR):
-        for filename in os.listdir(UPLOAD_DIR):
-            file_path = os.path.join(UPLOAD_DIR, filename)
-            try:
-                if os.path.isfile(file_path) or os.path.islink(file_path):
-                    os.unlink(file_path)
-                elif os.path.isdir(file_path):
-                    shutil.rmtree(file_path)
-            except Exception as e:
-                print(f'Failed to delete {file_path}. Reason: {e}')
-
-    # 이메일 본문 저장 (파일 시스템)
-    with open(os.path.join(UPLOAD_DIR, "email_body.txt"), "w", encoding="utf-8") as f:
-        f.write(original_body)
-
-    # 실제 수신자와 제목 정보를 json 파일로 저장합니다.
-    meta_data = {
-        "recipients": [email.strip() for email in to_email.split(',')],
-        "subject": subject
-    }
-    with open(os.path.join(UPLOAD_DIR, "email_meta.json"), "w", encoding="utf-8") as f:
-        json.dump(meta_data, f, ensure_ascii=False, indent=4)
-
-    # 첨부파일 저장 로직 (파일 시스템)
+    # 첨부파일 데이터 준비 (MongoDB에만 저장, 파일 시스템 사용 안 함)
     attachment_data_list: List[AttachmentData] = []
 
     for attachment in attachments:
         if attachment and attachment.filename:
-            # 파일 시스템에 저장
-            file_path = os.path.join(UPLOAD_DIR, attachment.filename)
+            # 첨부파일 읽기
             file_content = await attachment.read()
-
-            with open(file_path, "wb") as f:
-                f.write(file_content)
-            print(f"첨부파일 저장 완료: {attachment.filename}")
 
             # MongoDB에 저장할 첨부파일 데이터 준비 (Base64 인코딩)
             attachment_data = AttachmentData(
@@ -89,6 +52,7 @@ async def upload_email(
                 data=base64.b64encode(file_content).decode('utf-8')
             )
             attachment_data_list.append(attachment_data)
+            print(f"✅ 첨부파일 준비: {attachment.filename} ({len(file_content)} bytes)")
 
     # MongoDB에 원본 이메일 데이터 저장
     try:

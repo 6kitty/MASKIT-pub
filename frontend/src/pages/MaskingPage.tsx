@@ -165,17 +165,28 @@ export const MaskingPage: React.FC<MaskingPageProps> = ({
 
   // 원본 데이터 로드 후 첨부파일 다시 로드
   useEffect(() => {
+    console.log('🔄 useEffect 트리거됨 (originalEmailData 변경)')
+    console.log('originalEmailData:', originalEmailData)
+    console.log('originalEmailData?.email_id:', originalEmailData?.email_id)
+    console.log('originalEmailData?.attachments:', originalEmailData?.attachments)
+
     if (originalEmailData && originalEmailData.attachments) {
+      console.log('✅ 조건 만족 - loadAttachments 호출 예정')
       loadAttachments()
+    } else {
+      console.log('❌ 조건 불만족 - loadAttachments 호출 안 함')
+      console.log('  - originalEmailData 존재:', !!originalEmailData)
+      console.log('  - attachments 존재:', !!originalEmailData?.attachments)
     }
-  }, [originalEmailData?._id]) // _id로 변경하여 실제 데이터가 변경될 때만 호출
+  }, [originalEmailData?.email_id]) // email_id로 변경하여 실제 데이터가 변경될 때만 호출
 
   // MongoDB에서 원본 이메일 데이터 불러오기
   const loadOriginalEmail = async (email_id: string) => {
     setIsLoadingOriginal(true)
     try {
       console.log('📧 원본 이메일 조회 시작:', email_id)
-      const response = await fetch(`${API_BASE_URL}/api/v1/files/original_emails/${email_id}`)
+      // MaskingPage는 첨부파일을 마스킹해야 하므로 첨부파일 데이터 포함
+      const response = await fetch(`${API_BASE_URL}/api/v1/files/original_emails/${email_id}?include_attachments=true`)
 
       if (response.ok) {
         const result = await response.json()
@@ -191,8 +202,11 @@ export const MaskingPage: React.FC<MaskingPageProps> = ({
             has_body: !!result.data.body,
             original_body_length: result.data.original_body?.length,
             body_length: result.data.body?.length,
-            attachments_count: result.data.attachments?.length
+            attachments_count: result.data.attachments?.length,
+            attachments_array: result.data.attachments,
+            _id: result.data._id
           })
+          console.log('📎 첨부파일 상세:', result.data.attachments)
           setOriginalEmailData(result.data)
         }
       } else {
@@ -226,19 +240,42 @@ export const MaskingPage: React.FC<MaskingPageProps> = ({
 
   // 첨부파일 Blob URL 생성 (MongoDB에서 Base64 디코딩)
   const loadAttachments = async () => {
+    console.log('🔍 loadAttachments 호출됨')
+    console.log('originalEmailData:', originalEmailData)
+    console.log('originalEmailData.attachments:', originalEmailData?.attachments)
+
     const urlMap = new Map<string, string>()
 
     // MongoDB에서 불러온 원본 데이터가 있으면 그것을 사용
-    if (originalEmailData?.attachments) {
+    if (originalEmailData?.attachments && originalEmailData.attachments.length > 0) {
+      console.log(`📎 첨부파일 ${originalEmailData.attachments.length}개 처리 시작`)
+
       for (const attachment of originalEmailData.attachments) {
+        console.log(`처리 중인 첨부파일:`, attachment)
+
+        if (!attachment.data) {
+          console.warn(`⚠️ ${attachment.filename}에 data 필드 없음`)
+          continue
+        }
+
         try {
-          // Base64 데이터를 Blob으로 변환
+          // Base64 데이터를 Blob으로 변환 (청크 처리로 성능 최적화)
           const binaryString = atob(attachment.data)
-          const bytes = new Uint8Array(binaryString.length)
-          for (let i = 0; i < binaryString.length; i++) {
-            bytes[i] = binaryString.charCodeAt(i)
+          const byteArrays = []
+
+          const chunkSize = 512 * 1024 // 512KB 청크
+          for (let offset = 0; offset < binaryString.length; offset += chunkSize) {
+            const chunk = binaryString.slice(offset, offset + chunkSize)
+            const byteNumbers = new Array(chunk.length)
+
+            for (let i = 0; i < chunk.length; i++) {
+              byteNumbers[i] = chunk.charCodeAt(i)
+            }
+
+            byteArrays.push(new Uint8Array(byteNumbers))
           }
-          const blob = new Blob([bytes], { type: attachment.content_type })
+
+          const blob = new Blob(byteArrays, { type: attachment.content_type })
           const url = URL.createObjectURL(blob)
 
           // filename을 키로 사용
@@ -249,6 +286,7 @@ export const MaskingPage: React.FC<MaskingPageProps> = ({
         }
       }
     } else {
+      console.log('⚠️ originalEmailData.attachments가 없거나 비어있음')
       // 기존 방식 (file_id 사용)
       for (const attachment of emailData.attachments) {
         if ((attachment as any).file_id) {
@@ -1137,11 +1175,6 @@ export const MaskingPage: React.FC<MaskingPageProps> = ({
           } else {
             const saveResult = await saveMaskedResponse.json()
             console.log('✅ 마스킹된 이메일 MongoDB 저장 성공:', saveResult)
-            
-            // ✅ 저장 완료 후 짧은 대기 시간 (MongoDB 인덱싱 대기)
-            console.log('⏳ MongoDB 인덱싱 대기 중... (500ms)')
-            await new Promise(resolve => setTimeout(resolve, 500))
-            console.log('✅ 대기 완료, SMTP 전송 시작')
           }
         } catch (saveError) {
           console.error('⚠️ 마스킹된 이메일 저장 중 오류:', saveError)

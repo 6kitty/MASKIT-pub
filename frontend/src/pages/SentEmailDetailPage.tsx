@@ -370,12 +370,21 @@ export const SentEmailDetailPage: React.FC<SentEmailDetailPageProps> = ({
             const urlMap = new Map<string, string>()
             for (const attachment of result.data.masked_attachments) {
               try {
+                // Base64 디코딩 최적화 (청크 처리)
                 const binaryString = atob(attachment.data)
-                const bytes = new Uint8Array(binaryString.length)
-                for (let i = 0; i < binaryString.length; i++) {
-                  bytes[i] = binaryString.charCodeAt(i)
+                const byteArrays = []
+                const chunkSize = 512 * 1024
+
+                for (let offset = 0; offset < binaryString.length; offset += chunkSize) {
+                  const chunk = binaryString.slice(offset, offset + chunkSize)
+                  const byteNumbers = new Array(chunk.length)
+                  for (let i = 0; i < chunk.length; i++) {
+                    byteNumbers[i] = chunk.charCodeAt(i)
+                  }
+                  byteArrays.push(new Uint8Array(byteNumbers))
                 }
-                const blob = new Blob([bytes], { type: attachment.content_type })
+
+                const blob = new Blob(byteArrays, { type: attachment.content_type })
                 const url = URL.createObjectURL(blob)
                 urlMap.set(attachment.filename, url)
               } catch (error) {
@@ -397,12 +406,21 @@ export const SentEmailDetailPage: React.FC<SentEmailDetailPageProps> = ({
             const urlMap = new Map<string, string>()
             for (const attachment of result.data.attachments) {
               try {
+                // Base64 디코딩 최적화 (청크 처리)
                 const binaryString = atob(attachment.data)
-                const bytes = new Uint8Array(binaryString.length)
-                for (let i = 0; i < binaryString.length; i++) {
-                  bytes[i] = binaryString.charCodeAt(i)
+                const byteArrays = []
+                const chunkSize = 512 * 1024
+
+                for (let offset = 0; offset < binaryString.length; offset += chunkSize) {
+                  const chunk = binaryString.slice(offset, offset + chunkSize)
+                  const byteNumbers = new Array(chunk.length)
+                  for (let i = 0; i < chunk.length; i++) {
+                    byteNumbers[i] = chunk.charCodeAt(i)
+                  }
+                  byteArrays.push(new Uint8Array(byteNumbers))
                 }
-                const blob = new Blob([bytes], { type: attachment.content_type })
+
+                const blob = new Blob(byteArrays, { type: attachment.content_type })
                 const url = URL.createObjectURL(blob)
                 urlMap.set(attachment.filename, url)
               } catch (error) {

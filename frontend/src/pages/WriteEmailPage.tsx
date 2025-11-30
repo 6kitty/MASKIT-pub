@@ -207,8 +207,7 @@ export const WriteEmailPage: React.FC<WriteEmailPageProps> = ({ onBack, onSend }
       }
 
       const result = await response.json()
-      console.log('✅ 전송 성공:', result)
-      toast.success('이메일이 전송되었습니다')
+      console.log('마스킹 페이지로 이동:', result)
 
       // 콜백 호출 (email_id 포함)
       if (onSend) {
