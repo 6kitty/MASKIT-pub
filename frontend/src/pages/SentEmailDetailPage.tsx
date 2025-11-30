@@ -161,67 +161,57 @@ function MaskedTextWithMetadata({ text, decisions, originalText }: {
 
   const matches: MaskMatch[] = []
 
-  // 새로운 접근: 마스킹된 텍스트를 앞에서부터 순회하며 모든 PII 매칭
-  // 원본 텍스트 순서에 의존하지 않음
+  // 새로운 접근: 원본 텍스트에서 PII의 순서를 먼저 파악한 후, 그 순서대로 마스킹된 텍스트에서 매칭
+  // 이렇게 하면 줄바꿈이 달라도 PII 출현 순서는 유지됨
 
-  // 각 decision의 masked_value로 매핑 생성
-  interface MaskedValueMapping {
-    maskedValue: string
-    decisions: PIIDecision[]  // 같은 masked_value를 가진 여러 decision
+  // 1단계: 원본 텍스트에서 각 PII의 위치를 찾아 순서 결정
+  interface OriginalPosition {
+    decision: PIIDecision
+    position: number
   }
 
-  const maskedValueMap = new Map<string, PIIDecision[]>()
+  const originalPositions: OriginalPosition[] = []
 
   decisionsArray.forEach((decision) => {
-    const maskedValue = decision.masked_value || '***'
-    const normalizedMaskedValue = maskedValue.replace(/O/g, '*')
+    if (!originalText) return
 
-    if (!maskedValueMap.has(normalizedMaskedValue)) {
-      maskedValueMap.set(normalizedMaskedValue, [])
+    const position = originalText.indexOf(decision.value)
+    if (position !== -1) {
+      originalPositions.push({ decision, position })
+      console.log(`[원본 위치] ${decision.pii_id} (${decision.type}): "${decision.value}" at position ${position}`)
+    } else {
+      console.warn(`[원본 위치 찾기 실패] ${decision.pii_id}: "${decision.value}" not found in original text`)
     }
-    maskedValueMap.get(normalizedMaskedValue)!.push(decision)
   })
 
-  // 마스킹된 텍스트를 처음부터 스캔하여 모든 마스킹 패턴 찾기
+  // 원본 텍스트 순서대로 정렬
+  originalPositions.sort((a, b) => a.position - b.position)
+
+  console.log('📍 [원본 순서]:', originalPositions.map(p => `${p.decision.pii_id} (${p.decision.type})`).join(' → '))
+
+  // 2단계: 정렬된 순서대로 마스킹된 텍스트에서 masked_value 찾기
   let searchIndex = 0
 
-  while (searchIndex < text.length) {
-    let foundMatch: { index: number, length: number, decision: PIIDecision } | null = null
+  for (const { decision } of originalPositions) {
+    const maskedValue = (decision.masked_value || '***').replace(/O/g, '*')
+    const foundIndex = text.indexOf(maskedValue, searchIndex)
 
-    // 모든 가능한 masked_value 중에서 현재 위치에서 가장 먼저 나타나는 것 찾기
-    for (const [maskedValue, decisions] of maskedValueMap.entries()) {
-      const foundIndex = text.indexOf(maskedValue, searchIndex)
-
-      if (foundIndex !== -1) {
-        // 더 앞에 있는 매칭을 찾았거나, 첫 매칭인 경우
-        if (!foundMatch || foundIndex < foundMatch.index) {
-          // 이 masked_value에 해당하는 decision 중 아직 사용하지 않은 첫 번째 것 사용
-          const availableDecision = decisions.find(d => {
-            // 이미 매칭된 decision은 제외
-            return !matches.some(m => m.decision.pii_id === d.pii_id)
-          })
-
-          if (availableDecision) {
-            foundMatch = {
-              index: foundIndex,
-              length: maskedValue.length,
-              decision: availableDecision
-            }
-          }
-        }
-      }
-    }
-
-    if (foundMatch) {
+    if (foundIndex !== -1) {
       matches.push({
-        start: foundMatch.index,
-        end: foundMatch.index + foundMatch.length,
-        decision: foundMatch.decision
+        start: foundIndex,
+        end: foundIndex + maskedValue.length,
+        decision
       })
-      searchIndex = foundMatch.index + foundMatch.length
+      console.log(`[매칭 성공] ${decision.pii_id}: "${maskedValue}" at position ${foundIndex}`)
+      searchIndex = foundIndex + maskedValue.length
     } else {
-      // 더 이상 매칭할 것이 없음
-      break
+      console.error(`[매칭 실패] ${decision.pii_id}: "${maskedValue}" not found after position ${searchIndex}`)
+
+      // 전체 텍스트에서 찾아보기
+      const globalIndex = text.indexOf(maskedValue)
+      if (globalIndex !== -1) {
+        console.log(`💡 전체 텍스트에서는 발견됨! 위치: ${globalIndex} (현재 검색 위치: ${searchIndex})`)
+      }
     }
   }
 
