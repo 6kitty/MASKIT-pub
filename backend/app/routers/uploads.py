@@ -211,6 +211,12 @@ async def get_original_email(
         # _id 필드 제거 (ObjectId는 JSON 직렬화 불가)
         email_data.pop("_id", None)
 
+        # created_at을 KST 문자열로 변환
+        if "created_at" in email_data and email_data["created_at"]:
+            from app.utils.datetime_utils import utc_to_kst
+            kst_dt = utc_to_kst(email_data["created_at"])
+            email_data["created_at"] = kst_dt.isoformat()
+
         # 첨부파일 제외 옵션
         if not include_attachments and "attachments" in email_data:
             # 메타데이터만 포함
@@ -282,11 +288,16 @@ async def list_original_emails(
         # 전체 개수 조회
         total_count = await db.original_emails.count_documents(query)
 
-        # 첨부파일 필드명 변경
+        # 첨부파일 필드명 변경 및 날짜 포맷 변환
         result_emails = []
         for email in emails:
             if "attachments" in email:
                 email["attachments_summary"] = email.pop("attachments", [])
+            # created_at을 KST 문자열로 변환
+            if "created_at" in email and email["created_at"]:
+                from app.utils.datetime_utils import utc_to_kst
+                kst_dt = utc_to_kst(email["created_at"])
+                email["created_at"] = kst_dt.isoformat()
             result_emails.append(email)
 
         return {
@@ -395,6 +406,12 @@ async def get_masked_email(
 
         # _id 필드 제거 (ObjectId는 JSON 직렬화 불가)
         masked_data.pop("_id", None)
+
+        # created_at을 KST 문자열로 변환
+        if "created_at" in masked_data and masked_data["created_at"]:
+            from app.utils.datetime_utils import utc_to_kst
+            kst_dt = utc_to_kst(masked_data["created_at"])
+            masked_data["created_at"] = kst_dt.isoformat()
 
         # 첨부파일 제외 옵션
         if not include_attachments and "masked_attachments" in masked_data:

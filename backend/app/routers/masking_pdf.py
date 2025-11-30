@@ -269,6 +269,12 @@ async def get_masked_email(
         # _id 제거 (직렬화 오류 방지)
         masked_email.pop('_id', None)
 
+        # created_at을 KST 문자열로 변환
+        if "created_at" in masked_email and masked_email["created_at"]:
+            from app.utils.datetime_utils import utc_to_kst
+            kst_dt = utc_to_kst(masked_email["created_at"])
+            masked_email["created_at"] = kst_dt.isoformat()
+
         print(f"✅ 마스킹된 이메일 조회: {email_id}")
 
         return MaskedEmailResponse(

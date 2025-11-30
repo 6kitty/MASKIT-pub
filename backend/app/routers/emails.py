@@ -69,8 +69,15 @@ async def get_all_email_logs(
             user_name = user.get("nickname") if user else email.get("from_email", "알 수 없음")
             team_name = email.get("team_name") or (user.get("team_name") if user else "팀 없음")
             
+            # created_at을 KST로 변환
+            timestamp = None
+            if email.get("created_at"):
+                from app.utils.datetime_utils import utc_to_kst
+                kst_dt = utc_to_kst(email["created_at"])
+                timestamp = kst_dt.isoformat()
+
             log_entry = {
-                "timestamp": email.get("created_at").isoformat() if email.get("created_at") else None,
+                "timestamp": timestamp,
                 "email_id": str(email["_id"]),
                 "team_name": team_name,
                 "user_name": user_name,
@@ -248,6 +255,13 @@ async def get_email_detail(
                     "team_name": current_user.get("team_name"),
                 }
 
+                # 날짜 필드를 KST 문자열로 변환
+                from app.utils.datetime_utils import utc_to_kst
+                for date_field in ["created_at", "sent_at"]:
+                    if email.get(date_field):
+                        kst_dt = utc_to_kst(email[date_field])
+                        email[date_field] = kst_dt.isoformat()
+
         if not email:
             raise HTTPException(status_code=404, detail="이메일을 찾을 수 없습니다")
 
@@ -297,6 +311,13 @@ async def get_email_detail(
             email["_id"] = str(email["_id"])
         if "id" not in email:
             email["id"] = email.get("email_id") or email.get("_id")
+
+        # 날짜 필드를 KST 문자열로 변환 (emails 컬렉션에서 조회한 경우)
+        from app.utils.datetime_utils import utc_to_kst
+        for date_field in ["created_at", "sent_at", "read_at"]:
+            if email.get(date_field) and not isinstance(email[date_field], str):
+                kst_dt = utc_to_kst(email[date_field])
+                email[date_field] = kst_dt.isoformat()
 
         return email
         
@@ -514,6 +535,14 @@ async def get_my_emails(
         async for email in cursor:
             email["_id"] = str(email["_id"])
             email["id"] = str(email["_id"])
+
+            # 날짜 필드를 KST 문자열로 변환
+            from app.utils.datetime_utils import utc_to_kst
+            for date_field in ["created_at", "sent_at", "read_at"]:
+                if email.get(date_field):
+                    kst_dt = utc_to_kst(email[date_field])
+                    email[date_field] = kst_dt.isoformat()
+
             emails.append(email)
 
         print(f"✅ 보낸 메일 조회: {current_user['email']} - {len(emails)}개")
@@ -548,6 +577,14 @@ async def get_received_emails(
             email["_id"] = str(email["_id"])
             email["id"] = str(email["_id"])
             email["read"] = email.get("read_at") is not None
+
+            # 날짜 필드를 KST 문자열로 변환
+            from app.utils.datetime_utils import utc_to_kst
+            for date_field in ["created_at", "sent_at", "read_at"]:
+                if email.get(date_field):
+                    kst_dt = utc_to_kst(email[date_field])
+                    email[date_field] = kst_dt.isoformat()
+
             emails.append(email)
 
         print(f"✅ 받은 메일 조회: {current_user['email']} - {len(emails)}개")
