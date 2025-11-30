@@ -85,6 +85,13 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary/10 via-background to-primary/5 p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-2 text-center">
+          <div className="flex justify-center mb-0">
+            <img 
+              src="/logo.png" 
+              alt="MASKIT Logo" 
+              className="h-20 w-20 object-contain"
+            />
+          </div>
           <CardTitle className="text-3xl font-bold text-primary">MASKIT</CardTitle>
           <CardDescription className="text-base">이메일 마스킹 agent</CardDescription>
         </CardHeader>

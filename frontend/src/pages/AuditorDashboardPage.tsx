@@ -132,7 +132,6 @@ export default function AuditorDashboardPage() {
   const getSeverityBadge = (severity: string) => {
     const variants: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
       info: { label: '정보', variant: 'default' },
-      warning: { label: '경고', variant: 'secondary' },
       error: { label: '오류', variant: 'destructive' },
       critical: { label: '심각', variant: 'destructive' },
     };
@@ -170,7 +169,7 @@ export default function AuditorDashboardPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">감사 로그</h1>
+          <h1 className="text-3xl font-bold tracking-tight">프라이버시 보호 이력</h1>
           <p className="text-muted-foreground">시스템의 모든 활동을 추적하고 감사합니다</p>
         </div>
         <Button onClick={loadLogs} disabled={loading}>
@@ -180,7 +179,7 @@ export default function AuditorDashboardPage() {
       </div>
 
       {/* Statistics */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">총 로그</CardTitle>
@@ -188,7 +187,7 @@ export default function AuditorDashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{total}</div>
-            <p className="text-xs text-muted-foreground">전체 감사 기록</p>
+            <p className="text-xs text-muted-foreground">전체 프라이버시 보호 이력</p>
           </CardContent>
         </Card>
 
@@ -218,18 +217,6 @@ export default function AuditorDashboardPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">경고</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-amber-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-amber-600">
-              {logs.filter(l => l.severity === 'warning' || l.severity === 'error').length}
-            </div>
-            <p className="text-xs text-muted-foreground">주의 필요</p>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Filters */}
@@ -289,7 +276,7 @@ export default function AuditorDashboardPage() {
       {/* Logs Table */}
       <Card>
         <CardHeader>
-          <CardTitle>감사 로그 ({total}건)</CardTitle>
+          <CardTitle>프라이버시 보호 이력 ({total}건)</CardTitle>
           <CardDescription>최근 활동 내역</CardDescription>
         </CardHeader>
         <CardContent>

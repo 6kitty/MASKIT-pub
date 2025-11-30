@@ -181,7 +181,7 @@ function App() {
     baseMenu.push(
       {
         id: 'logs',
-        label: '사용 로그',
+        label: '프라이버시 보호 이력',
         icon: <FileText className="h-4 w-4" />,
         onClick: () => setCurrentView('logs'),
       },

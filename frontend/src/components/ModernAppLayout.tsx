@@ -57,10 +57,10 @@ export function ModernAppLayout({
         <Sidebar>
           <SidebarHeader>
             <div className="flex items-center gap-2 px-4 py-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <span className="text-sm font-bold">M</span>
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg overflow-hidden">
+                <img src="/logo.png" alt="Logo" className="h-12 w-12 object-contain" />
               </div>
-              <div className="flex flex-col">
+              <div className="flex flex-col mt-1.5">
                 <span className="text-sm font-semibold">MASKIT</span>
                 <span className="text-xs text-muted-foreground">PBL: 헨젤과 그레텔</span>
               </div>
