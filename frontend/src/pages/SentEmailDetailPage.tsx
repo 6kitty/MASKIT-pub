@@ -435,7 +435,7 @@ export const SentEmailDetailPage: React.FC<SentEmailDetailPageProps> = ({
     tempDiv.innerHTML = tempDiv.innerHTML
       .replace(/<br\s*\/?>/gi, '\n')
       .replace(/<\/div>/gi, '\n')
-      .replace(/<\/p>/gi, '\n\n')
+      .replace(/<\/p>/gi, '\n')
       .replace(/<div>/gi, '')
       .replace(/<p>/gi, '')
     return tempDiv.textContent || tempDiv.innerText || ''

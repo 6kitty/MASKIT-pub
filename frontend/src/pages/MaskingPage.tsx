@@ -104,7 +104,6 @@ export const MaskingPage: React.FC<MaskingPageProps> = ({
   onBack,
   onSendComplete,
 }) => {
-  const [emailBodyParagraphs, setEmailBodyParagraphs] = useState<string[]>([])
   const [attachmentUrls, setAttachmentUrls] = useState<Map<string, string>>(new Map())
   const [maskingDecisions, setMaskingDecisions] = useState<Record<string, MaskingDecision>>({})
 
@@ -206,11 +205,23 @@ export const MaskingPage: React.FC<MaskingPageProps> = ({
     }
   }
 
-  // 이메일 본문 로드
+  // HTML을 텍스트로 변환 (줄바꿈 보존)
+  const htmlToText = (html: string): string => {
+    if (!html) return ''
+    const tempDiv = document.createElement('div')
+    tempDiv.innerHTML = html
+    tempDiv.innerHTML = tempDiv.innerHTML
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/div>/gi, '\n')
+      .replace(/<\/p>/gi, '\n')
+      .replace(/<div>/gi, '')
+      .replace(/<p>/gi, '')
+    return tempDiv.textContent || tempDiv.innerText || ''
+  }
+
+  // 이메일 본문 로드 (더 이상 필요 없음 - htmlToText 직접 사용)
   const loadEmailBody = () => {
-    const bodyText = emailData.body || ''
-    const paragraphs = bodyText.split('\n').filter(p => p.trim().length > 0)
-    setEmailBodyParagraphs(paragraphs)
+    // 본문은 마스킹 시점에 htmlToText로 변환됨
   }
 
   // 첨부파일 Blob URL 생성 (MongoDB에서 Base64 디코딩)
@@ -813,7 +824,8 @@ export const MaskingPage: React.FC<MaskingPageProps> = ({
 
     try {
       // ==================== 1단계: 이메일 본문 마스킹 ====================
-      let tempMaskedBody = emailBodyRef.current?.innerText || emailBodyParagraphs.join('\n')
+      // HTML을 텍스트로 변환 (줄바꿈 보존)
+      let tempMaskedBody = htmlToText(emailData.body)
 
       for (const pii of checkedPIIs) {
         if (pii.source === 'regex' || pii.source === 'backend_body') {

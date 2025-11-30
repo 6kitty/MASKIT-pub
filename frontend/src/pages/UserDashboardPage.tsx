@@ -29,6 +29,7 @@ interface Email {
   sent_at?: string
   attachments?: any[]
   type: 'sent' | 'received'
+  status?: 'sent' | 'failed' | 'received'
   read?: boolean
 }
 
@@ -86,7 +87,8 @@ export function UserDashboardPage({ onNavigate }: UserDashboardPageProps) {
             to_email: email.to_emails?.[0] || '',
             created_at: email.created_at,
             attachments: email.attachments_summary || [],
-            type: 'sent' as const
+            type: 'sent' as const,
+            status: (email.status === 'failed' ? 'failed' : 'sent') as 'sent' | 'failed'
           }))
           allEmails.push(...sentEmails)
         }
@@ -97,7 +99,8 @@ export function UserDashboardPage({ onNavigate }: UserDashboardPageProps) {
         const receivedData = await receivedResponse.json()
         const receivedEmails = receivedData.map((email: any) => ({
           ...email,
-          type: 'received' as const
+          type: 'received' as const,
+          status: 'received' as const
         }))
         allEmails.push(...receivedEmails)
       }
@@ -124,19 +127,28 @@ export function UserDashboardPage({ onNavigate }: UserDashboardPageProps) {
     }
   }
 
-  const getTypeBadge = (type: 'sent' | 'received') => {
-    if (type === 'sent') {
+  const getTypeBadge = (email: Email) => {
+    const status = email.status || (email.type === 'sent' ? 'sent' : 'received')
+
+    if (status === 'sent') {
       return (
         <Badge variant="default" className="gap-1">
           <Send className="h-3 w-3" />
-          <span>보냄</span>
+          <span>전송</span>
+        </Badge>
+      )
+    } else if (status === 'failed') {
+      return (
+        <Badge variant="destructive" className="gap-1">
+          <Send className="h-3 w-3" />
+          <span>전송 실패</span>
         </Badge>
       )
     } else {
       return (
         <Badge variant="secondary" className="gap-1">
           <Inbox className="h-3 w-3" />
-          <span>받음</span>
+          <span>수신</span>
         </Badge>
       )
     }
@@ -345,7 +357,7 @@ export function UserDashboardPage({ onNavigate }: UserDashboardPageProps) {
                         {email.to_email || '-'}
                       </span>
                     </TableCell>
-                    <TableCell>{getTypeBadge(email.type)}</TableCell>
+                    <TableCell>{getTypeBadge(email)}</TableCell>
                     <TableCell>
                       <span className="text-sm text-muted-foreground">
                         {formatDate(email.created_at)}
