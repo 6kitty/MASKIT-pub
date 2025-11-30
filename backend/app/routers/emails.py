@@ -210,27 +210,20 @@ async def get_email_detail(
     email_id는 MongoDB ObjectId 또는 커스텀 email_id (email_20251126_161911_a14eeebd 형식) 모두 가능
     """
     try:
-        print(f"\n[Email Detail] ===== 이메일 조회 시작 =====")
-        print(f"[Email Detail] email_id: {email_id}")
-        print(f"[Email Detail] current_user: {current_user.get('email')}")
-        
         # 먼저 ObjectId로 시도
         email = None
         try:
             obj_id = ObjectId(email_id)
             email = await db.emails.find_one({"_id": obj_id})
-            print(f"[Email Detail] ObjectId 조회 결과: {'발견' if email else '없음'}")
         except:
             pass
 
         # ObjectId로 못 찾았으면 email_id 필드로 조회
         if not email:
-            print(f"[Email Detail] email_id 필드로 조회 시도")
             # original_emails 컬렉션에서 조회
             original_email = await db.original_emails.find_one({"email_id": email_id})
-            
+
             if original_email:
-                print(f"[Email Detail] original_emails에서 발견")
                 # masked_emails에서도 조회
                 masked_email = await db.masked_emails.find_one({"email_id": email_id})
 
@@ -256,7 +249,6 @@ async def get_email_detail(
                 }
 
         if not email:
-            print(f"[Email Detail] ❌ 이메일을 찾을 수 없음")
             raise HTTPException(status_code=404, detail="이메일을 찾을 수 없습니다")
 
         # 권한 확인
@@ -269,19 +261,11 @@ async def get_email_detail(
         is_receiver = user_email in to_emails or email.get("to_email") == user_email
         is_admin = current_user.get("role") in ["root_admin", "auditor", "approver"]
 
-        print(f"[Email Detail] 권한 확인:")
-        print(f"  - is_sender: {is_sender}")
-        print(f"  - is_receiver: {is_receiver}")
-        print(f"  - is_admin: {is_admin}")
-
         if not (is_sender or is_receiver or is_admin):
-            print(f"[Email Detail] ❌ 권한 없음")
             raise HTTPException(status_code=403, detail="이메일 조회 권한이 없습니다")
 
-        # ✅ 읽음 처리 (받은 메일인 경우) - 조건 개선
+        # 읽음 처리 (받은 메일인 경우)
         if is_receiver and not email.get("read_at"):
-            print(f"[Email Detail] 📖 읽음 처리 시도")
-            
             # emails 컬렉션에서 ObjectId로 업데이트 시도
             if "_id" in email and len(str(email.get("_id", ""))) == 24:
                 try:
@@ -290,36 +274,30 @@ async def get_email_detail(
                         {"_id": obj_id},
                         {"$set": {"read_at": get_kst_now()}}
                     )
-                    print(f"[Email Detail] emails 컬렉션 읽음 처리: matched={update_result.matched_count}, modified={update_result.modified_count}")
                     if update_result.modified_count > 0:
                         email["read_at"] = get_kst_now()
-                except Exception as e:
-                    print(f"[Email Detail] ⚠️ emails 컬렉션 업데이트 실패: {e}")
-            
-            # ✅ email_id 필드로도 업데이트 시도 (SMTP로 받은 메일)
+                except Exception:
+                    pass
+
+            # email_id 필드로도 업데이트 시도 (SMTP로 받은 메일)
             if "email_id" in email:
                 try:
                     update_result = await db.emails.update_one(
                         {"email_id": email["email_id"]},
                         {"$set": {"read_at": get_kst_now()}}
                     )
-                    print(f"[Email Detail] email_id로 읽음 처리: matched={update_result.matched_count}, modified={update_result.modified_count}")
                     if update_result.modified_count > 0:
                         email["read_at"] = get_kst_now()
                         email["read"] = True
-                except Exception as e:
-                    print(f"[Email Detail] ⚠️ email_id 업데이트 실패: {e}")
+                except Exception:
+                    pass
 
         # ID 필드 정규화
         if "_id" in email and not isinstance(email["_id"], str):
             email["_id"] = str(email["_id"])
         if "id" not in email:
             email["id"] = email.get("email_id") or email.get("_id")
-        
-        print(f"[Email Detail] ✅ 이메일 조회 완료")
-        print(f"[Email Detail] read_at: {email.get('read_at')}")
-        print(f"[Email Detail] ===== 이메일 조회 끝 =====\n")
-        
+
         return email
         
     except HTTPException:
@@ -580,95 +558,3 @@ async def get_received_emails(
         raise HTTPException(status_code=500, detail=f"메일 조회 실패: {str(e)}")
 
 
-@router.get("/email/{email_id}")
-async def get_email_detail(
-    email_id: str,
-    current_user: dict = Depends(get_current_user),
-    db = Depends(get_db)
-):
-    """
-    이메일 상세 조회 (권한 확인 포함)
-    email_id는 MongoDB ObjectId 또는 커스텀 email_id (email_20251126_161911_a14eeebd 형식) 모두 가능
-    """
-    try:
-        # 먼저 ObjectId로 시도
-        email = None
-        try:
-            obj_id = ObjectId(email_id)
-            email = await db.emails.find_one({"_id": obj_id})
-        except:
-            # ObjectId가 아니면 커스텀 email_id로 조회
-            pass
-
-        # ObjectId로 못 찾았으면 email_id 필드로 조회
-        if not email:
-            # original_emails 컬렉션에서 조회
-            original_email = await db.original_emails.find_one({"email_id": email_id})
-            if original_email:
-                # masked_emails에서도 조회
-                masked_email = await db.masked_emails.find_one({"email_id": email_id})
-
-                # 두 데이터를 합쳐서 반환
-                email = {
-                    "_id": str(original_email.get("_id", "")),
-                    "id": email_id,
-                    "email_id": email_id,
-                    "from_email": original_email.get("from_email"),
-                    "to_email": original_email.get("to_emails", [])[0] if original_email.get("to_emails") else "",
-                    "to_emails": original_email.get("to_emails", []),
-                    "subject": original_email.get("subject"),
-                    "body": original_email.get("original_body"),
-                    "original_body": original_email.get("original_body"),
-                    "masked_body": masked_email.get("masked_body") if masked_email else None,
-                    "attachments": original_email.get("attachments", []),
-                    "masked_attachments": masked_email.get("masked_attachments", []) if masked_email else [],
-                    "masking_decisions": masked_email.get("masking_decisions", {}) if masked_email else {},
-                    "pii_masked_count": masked_email.get("pii_masked_count", 0) if masked_email else 0,
-                    "created_at": original_email.get("created_at"),
-                    "sent_at": original_email.get("created_at"),
-                    "team_name": current_user.get("team_name"),
-                }
-
-        if not email:
-            raise HTTPException(status_code=404, detail="이메일을 찾을 수 없습니다")
-
-        # 권한 확인
-        user_email = current_user["email"]
-        to_emails = email.get("to_emails", [])
-        if isinstance(to_emails, str):
-            to_emails = [to_emails]
-
-        is_sender = email.get("from_email") == user_email
-        is_receiver = user_email in to_emails or email.get("to_email") == user_email
-        is_admin = current_user.get("role") in ["root_admin", "auditor", "approver"]
-
-        if not (is_sender or is_receiver or is_admin):
-            raise HTTPException(status_code=403, detail="이메일 조회 권한이 없습니다")
-
-        # 읽음 처리 (받은 메일인 경우)
-        if is_receiver and not email.get("read_at"):
-            if isinstance(email.get("_id"), str) and len(email.get("_id", "")) == 24:
-                try:
-                    obj_id = ObjectId(email["_id"])
-                    await db.emails.update_one(
-                        {"_id": obj_id},
-                        {"$set": {"read_at": get_kst_now()}}
-                    )
-                    email["read_at"] = get_kst_now()
-                except:
-                    pass
-
-        # ID 필드 정규화
-        if "_id" in email and not isinstance(email["_id"], str):
-            email["_id"] = str(email["_id"])
-        if "id" not in email:
-            email["id"] = email.get("email_id") or email.get("_id")
-        
-        print(f"✅ 메일 상세 조회: {email_id} by {user_email}")
-        return email
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"❌ 메일 상세 조회 오류: {e}")
-        raise HTTPException(status_code=500, detail=f"메일 조회 실패: {str(e)}")

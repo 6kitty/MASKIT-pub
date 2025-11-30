@@ -179,10 +179,15 @@ async def watch_files():
 # ================== 원본 이메일 조회 API ==================
 
 @router.get("/original_emails/{email_id}")
-async def get_original_email(email_id: str, db = Depends(get_db)):
+async def get_original_email(
+    email_id: str,
+    include_attachments: bool = True,
+    db = Depends(get_db)
+):
     """
     저장된 원본 이메일 조회
     - email_id: 이메일 고유 ID (커스텀 email_id 또는 MongoDB _id)
+    - include_attachments: 첨부파일 데이터 포함 여부 (기본: True)
     """
     try:
         # 1차: 커스텀 email_id로 조회
@@ -205,6 +210,19 @@ async def get_original_email(email_id: str, db = Depends(get_db)):
 
         # _id 필드 제거 (ObjectId는 JSON 직렬화 불가)
         email_data.pop("_id", None)
+
+        # 첨부파일 제외 옵션
+        if not include_attachments and "attachments" in email_data:
+            # 메타데이터만 포함
+            email_data["attachments_summary"] = [
+                {
+                    "filename": att["filename"],
+                    "content_type": att["content_type"],
+                    "size": att["size"]
+                }
+                for att in email_data["attachments"]
+            ]
+            email_data.pop("attachments", None)
 
         return {
             "success": True,
@@ -242,31 +260,33 @@ async def list_original_emails(
         if from_email:
             query["from_email"] = from_email
 
-        # MongoDB에서 이메일 목록 조회 (최신순)
-        cursor = db.original_emails.find(query).sort("created_at", -1).skip(skip).limit(min(limit, 100))
+        # MongoDB Projection으로 첨부파일 데이터 제외 (성능 최적화)
+        projection = {
+            "_id": 0,
+            "email_id": 1,
+            "from_email": 1,
+            "to_emails": 1,
+            "subject": 1,
+            "original_body": 1,
+            "created_at": 1,
+            # 첨부파일 메타데이터만 포함 (data 필드 제외)
+            "attachments.filename": 1,
+            "attachments.content_type": 1,
+            "attachments.size": 1
+        }
+
+        # MongoDB에서 이메일 목록 조회 (최신순, projection 적용)
+        cursor = db.original_emails.find(query, projection).sort("created_at", -1).skip(skip).limit(min(limit, 100))
         emails = await cursor.to_list(length=limit)
 
         # 전체 개수 조회
         total_count = await db.original_emails.count_documents(query)
 
-        # _id 필드 제거 및 첨부파일 데이터 요약
+        # 첨부파일 필드명 변경
         result_emails = []
         for email in emails:
-            email.pop("_id", None)
-
-            # 첨부파일 데이터는 용량이 크므로 메타데이터만 포함
             if "attachments" in email:
-                email["attachments_summary"] = [
-                    {
-                        "filename": att["filename"],
-                        "content_type": att["content_type"],
-                        "size": att["size"]
-                    }
-                    for att in email["attachments"]
-                ]
-                # 실제 파일 데이터는 제외
-                email.pop("attachments", None)
-
+                email["attachments_summary"] = email.pop("attachments", [])
             result_emails.append(email)
 
         return {
@@ -341,10 +361,15 @@ async def download_attachment(email_id: str, filename: str, db = Depends(get_db)
 # ================== 마스킹된 이메일 조회 API ==================
 
 @router.get("/masked_emails/{email_id}")
-async def get_masked_email(email_id: str, db = Depends(get_db)):
+async def get_masked_email(
+    email_id: str,
+    include_attachments: bool = True,
+    db = Depends(get_db)
+):
     """
     저장된 마스킹 이메일 조회
     - email_id: 이메일 고유 ID (커스텀 email_id 또는 MongoDB _id)
+    - include_attachments: 첨부파일 데이터 포함 여부 (기본: True)
     """
     try:
         # 1차: 커스텀 email_id로 조회
@@ -370,6 +395,19 @@ async def get_masked_email(email_id: str, db = Depends(get_db)):
 
         # _id 필드 제거 (ObjectId는 JSON 직렬화 불가)
         masked_data.pop("_id", None)
+
+        # 첨부파일 제외 옵션
+        if not include_attachments and "masked_attachments" in masked_data:
+            # 메타데이터만 포함
+            masked_data["attachments_summary"] = [
+                {
+                    "filename": att["filename"],
+                    "content_type": att["content_type"],
+                    "size": att["size"]
+                }
+                for att in masked_data["masked_attachments"]
+            ]
+            masked_data.pop("masked_attachments", None)
 
         return {
             "success": True,

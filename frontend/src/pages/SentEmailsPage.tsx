@@ -61,8 +61,8 @@ export function SentEmailsPage({ onNavigate, onBack }: SentEmailsPageProps) {
       }
       const user = JSON.parse(userJson)
 
-      // original_emails 컬렉션에서 조회 (email_id 필드 포함)
-      const response = await fetch(`${API_BASE}/api/v1/files/original_emails?from_email=${encodeURIComponent(user.email)}&limit=100`, {
+      // original_emails 컬렉션에서 조회 (email_id 필드 포함) - limit 감소
+      const response = await fetch(`${API_BASE}/api/v1/files/original_emails?from_email=${encodeURIComponent(user.email)}&limit=20`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },

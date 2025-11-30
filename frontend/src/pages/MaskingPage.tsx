@@ -151,22 +151,25 @@ export const MaskingPage: React.FC<MaskingPageProps> = ({
     }
   }, [emailData.email_id])
 
-  // 초기화
+  // 초기화 (originalEmailData가 없을 때만)
   useEffect(() => {
     loadEmailBody()
-    loadAttachments()
+    // originalEmailData가 로드되면 그쪽에서 loadAttachments 호출되므로 중복 방지
+    if (!emailData.email_id) {
+      loadAttachments()
+    }
     // detectPII()는 AI 분석 시 실행되므로 초기화 시 제거
-  }, [emailData])
+  }, [emailData.email_id]) // email_id만 의존성으로 설정하여 불필요한 재호출 방지
 
   // 원본 이메일 데이터 로드 후에는 자동 분석하지 않음 (사용자가 커스텀 설정 후 분석 버튼 클릭)
   // useEffect 제거하여 자동 PII 분석 방지
 
   // 원본 데이터 로드 후 첨부파일 다시 로드
   useEffect(() => {
-    if (originalEmailData) {
+    if (originalEmailData && originalEmailData.attachments) {
       loadAttachments()
     }
-  }, [originalEmailData])
+  }, [originalEmailData?._id]) // _id로 변경하여 실제 데이터가 변경될 때만 호출
 
   // MongoDB에서 원본 이메일 데이터 불러오기
   const loadOriginalEmail = async (email_id: string) => {
