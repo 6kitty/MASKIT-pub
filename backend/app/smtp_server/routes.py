@@ -5,8 +5,8 @@ from fastapi import APIRouter, HTTPException, status, Query, Depends, Request
 from typing import Optional, Any # <<< [수정] Any 또는 dict를 위해 추가
 from datetime import datetime,timedelta
 from bson import ObjectId
-
-from app.database.mongodb import get_database, get_kst_now, SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_USE_TLS, SMTP_USE_SSL # 기본 설정 Import
+from app.utils.datetime_utils import get_kst_now
+from app.database.mongodb import get_database, SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_USE_TLS, SMTP_USE_SSL # 기본 설정 Import
 from app.smtp_server.models import EmailSendRequest, EmailSendResponse, EmailListResponse
 from app.smtp_server.client import smtp_client
 from app.audit.logger import AuditLogger

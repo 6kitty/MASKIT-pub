@@ -119,6 +119,7 @@ export const MaskingPage: React.FC<MaskingPageProps> = ({
     maskingDecision?: MaskingDecision
     coordinate?: PIICoordinate  // 첨부파일 PII의 좌표 정보
     entityIndex?: number  // 원본 entity 인덱스
+    start_char?: number
   }>>([])
   const [showPIICheckboxList, setShowPIICheckboxList] = useState(false)
   const [aiSummary, setAiSummary] = useState('커스텀 설정을 선택하고 분석을 시작하세요.')
@@ -451,6 +452,7 @@ export const MaskingPage: React.FC<MaskingPageProps> = ({
         maskingDecision?: MaskingDecision
         coordinate?: PIICoordinate  // 첨부파일 PII의 좌표 정보
         entityIndex?: number  // 원본 entity 인덱스
+        start_char?: number
       }> = []
 
       // 전체 중복 체크용 Set (모든 출처 통합)
@@ -484,7 +486,8 @@ export const MaskingPage: React.FC<MaskingPageProps> = ({
             value: entity.text,
             source: 'backend_body',
             shouldMask: false,
-            maskingDecision: undefined
+            maskingDecision: undefined,
+            start_char: entity.start_char
           })
         } else {
           console.log(`[중복 제거] 백엔드 본문 PII 제외: ${entity.text} (이미 추가됨)`)
@@ -530,7 +533,7 @@ export const MaskingPage: React.FC<MaskingPageProps> = ({
 
       // ==================== 5단계: RAG로 마스킹 필요 여부 분석 ====================
       setAiSummary('5단계: AI가 가이드라인을 검색하고 마스킹 필요 여부 분석 중...')
-
+      
       const context: AnalysisContext = {
         sender_type: senderContext,
         receiver_type: receiverContext,
@@ -629,6 +632,9 @@ export const MaskingPage: React.FC<MaskingPageProps> = ({
           const matchingDecision = decisions[decisionKey]
 
           if (matchingDecision) {
+            // ✅ pii_id를 저장 (마스킹 시 maskingDecisions 키와 매칭하기 위함)
+            (pii as any).pii_id = decisionKey
+
             // 마스킹 필요 여부에 관계없이 항상 decision 정보 저장
             pii.shouldMask = matchingDecision.should_mask
             pii.maskingDecision = matchingDecision as MaskingDecision
@@ -799,19 +805,34 @@ export const MaskingPage: React.FC<MaskingPageProps> = ({
     setIsMasking(true)
     toast.loading('마스킹 처리 중...', { id: 'masking-only' })
 
+    // 마스킹 결정 복사본 생성 (실제 마스킹 값으로 업데이트하기 위함)
+    const updatedDecisions = { ...maskingDecisions }
+
     try {
       // ==================== 1단계: 이메일 본문 마스킹 ====================
       let tempMaskedBody = emailBodyRef.current?.innerText || emailBodyParagraphs.join('\n')
 
       for (const pii of checkedPIIs) {
         if (pii.source === 'regex' || pii.source === 'backend_body') {
-          // 프론트엔드 마스킹 규칙 사용 (백엔드 masked_value 무시)
+          // 프론트엔드 마스킹 규칙 사용
           const masked = maskValue(pii.value, pii.type)
           tempMaskedBody = tempMaskedBody.replace(new RegExp(escapeRegex(pii.value), 'g'), masked)
+
+          // ✅ 실제 마스킹된 값을 decision에 저장
+          // pii.pii_id는 "pii_0", "pii_1" 같은 형식 (AI 분석 시 저장됨)
+          const piiId = (pii as any).pii_id
+          if (piiId && updatedDecisions[piiId]) {
+            const oldMaskedValue = updatedDecisions[piiId].masked_value
+            updatedDecisions[piiId].masked_value = masked
+            console.log(`[마스킹 업데이트] ${piiId} (${pii.type}): "${pii.value}" -> "${masked}" (기존: "${oldMaskedValue}")`)
+          } else {
+            console.warn(`[마스킹 실패] pii_id=${piiId}, id=${pii.id} - decision을 찾을 수 없음`)
+          }
         }
       }
 
       setMaskedBody(tempMaskedBody)
+      setMaskingDecisions(updatedDecisions) // 업데이트된 decision 저장
 
       // ==================== 2단계: 첨부파일 마스킹 ====================
       const attachmentPIIs = checkedPIIs.filter(pii => pii.source === 'backend_attachment' && pii.filename)
@@ -1022,7 +1043,7 @@ export const MaskingPage: React.FC<MaskingPageProps> = ({
               masked_body: tempMaskedBody,
               masked_attachment_filenames: tempMaskedAttachments,
               original_attachment_filenames: originalAttachmentFilenames,  // 원본 첨부파일 추가
-              masking_decisions: maskingDecisions,
+              masking_decisions: updatedDecisions, // ✅ 업데이트된 decision 사용
               pii_masked_count: checkedPIIs.length
             })
           })

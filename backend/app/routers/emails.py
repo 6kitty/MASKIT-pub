@@ -5,7 +5,8 @@ from datetime import datetime, timedelta
 from pydantic import BaseModel, EmailStr
 from bson import ObjectId
 
-from app.database.mongodb import get_db, get_kst_now
+from app.database.mongodb import get_db
+from app.utils.datetime_utils import get_kst_now
 from app.auth.auth_utils import get_current_user, get_current_auditor
 from motor.motor_asyncio import AsyncIOMotorGridFSBucket
 from app.audit.logger import AuditLogger

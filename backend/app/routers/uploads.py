@@ -9,7 +9,8 @@ import asyncio
 import base64
 from datetime import datetime,timedelta
 import uuid
-from app.database.mongodb import get_db, get_kst_now
+from app.database.mongodb import get_db
+from app.utils.datetime_utils import get_kst_now
 from app.models.email import AttachmentData, OriginalEmailData
 
 router = APIRouter()

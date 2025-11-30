@@ -21,6 +21,9 @@ const getPIITypeKorean = (type: string): string => {
     'address': '주소',
     'company': '회사명',
   }
+  // MaskingPage.tsx에서 사용하는 PII 타입 추가
+  typeMap['PERSON'] = '이름'
+  typeMap['ORGANIZATION'] = '회사명'
   return typeMap[type] || type
 }
 
@@ -112,15 +115,39 @@ function MaskedTextWithMetadata({ text, decisions, originalText }: {
   text: string
   decisions: Record<string, PIIDecision>
   originalText?: string
-}) {
+}) 
+{
   if (!text || !decisions || Object.keys(decisions).length === 0) {
     return <span>{text}</span>
   }
 
-  // decisions 객체를 배열로 변환하면서 pii_id를 추가
   const decisionsArray = Object.entries(decisions)
     .map(([key, value]) => ({ ...value, pii_id: key }))
-    .filter(d => d.should_mask && d.masked_value)
+    .filter(d => d.should_mask) // should_mask=true 인 것만 처리
+
+  // 📊 디버깅용 정보 출력
+  const debugInfo = {
+    totalDecisions: Object.keys(decisions).length,
+    filteredDecisions: decisionsArray.length,
+    decisions: decisionsArray.map(d => ({
+      pii_id: d.pii_id,
+      type: d.type,
+      value: d.value,
+      masked_value: d.masked_value
+    })),
+    maskedText: text.substring(0, 300), // 너무 길면 자름
+    originalText: originalText?.substring(0, 300)
+  }
+
+  // 콘솔 테이블로 보기 좋게 출력
+  console.log('🔍 [DEBUG] Masking Decisions:', debugInfo)
+  console.table(debugInfo.decisions)
+  console.log('📝 [DEBUG] 전체 마스킹된 텍스트:', text)
+  console.log('📝 [DEBUG] 텍스트 길이:', text.length)
+
+  // 전역 변수로 저장 (브라우저 콘솔에서 window.debugDecisions로 확인 가능)
+  ;(window as any).debugDecisions = debugInfo
+  ;(window as any).maskedText = text
 
   if (decisionsArray.length === 0) {
     return <span>{text}</span>
@@ -134,80 +161,67 @@ function MaskedTextWithMetadata({ text, decisions, originalText }: {
 
   const matches: MaskMatch[] = []
 
-  if (originalText && originalText.length > 0) {
-    interface MaskPattern {
-      value: string
-      start: number
-      end: number
+  // 새로운 접근: 원본 텍스트에서 PII의 순서를 먼저 파악한 후, 그 순서대로 마스킹된 텍스트에서 매칭
+  // 이렇게 하면 줄바꿈이 달라도 PII 출현 순서는 유지됨
+
+  // 1단계: 원본 텍스트에서 각 PII의 위치를 찾아 순서 결정
+  interface OriginalPosition {
+    decision: PIIDecision
+    position: number
+  }
+
+  const originalPositions: OriginalPosition[] = []
+
+  decisionsArray.forEach((decision) => {
+    if (!originalText) return
+
+    const position = originalText.indexOf(decision.value)
+    if (position !== -1) {
+      originalPositions.push({ decision, position })
+      console.log(`[원본 위치] ${decision.pii_id} (${decision.type}): "${decision.value}" at position ${position}`)
+    } else {
+      console.warn(`[원본 위치 찾기 실패] ${decision.pii_id}: "${decision.value}" not found in original text`)
     }
+  })
 
-    const maskPatterns: MaskPattern[] = []
-    let i = 0
-    while (i < text.length) {
-      if (text[i] === '*') {
-        const start = i
-        while (i < text.length && text[i] === '*') {
-          i++
-        }
-        maskPatterns.push({
-          value: text.substring(start, i),
-          start,
-          end: i
-        })
-      } else {
-        i++
-      }
-    }
+  // 원본 텍스트 순서대로 정렬
+  originalPositions.sort((a, b) => a.position - b.position)
 
-    const sortedDecisions = [...decisionsArray].sort((a, b) => {
-      const getIdNumber = (pii_id: string | undefined): number => {
-        if (!pii_id) return 9999
-        const match = pii_id.match(/\d+/)
-        return match ? parseInt(match[0]) : 9999
-      }
-      return getIdNumber(a.pii_id) - getIdNumber(b.pii_id)
-    })
+  console.log('📍 [원본 순서]:', originalPositions.map(p => `${p.decision.pii_id} (${p.decision.type})`).join(' → '))
 
-    let patternIndex = 0
-    for (const decision of sortedDecisions) {
-      const maskedValue = decision.masked_value || '***'
-      let found = false
-      for (let j = patternIndex; j < maskPatterns.length; j++) {
-        const pattern = maskPatterns[j]
-        if (pattern.value === maskedValue) {
-          matches.push({
-            start: pattern.start,
-            end: pattern.end,
-            decision
-          })
-          patternIndex = j + 1
-          found = true
-          break
-        }
-      }
-    }
-  } else {
-    let searchIndex = 0
-    for (const decision of decisionsArray) {
-      const maskedValue = decision.masked_value || '***'
-      const position = text.indexOf(maskedValue, searchIndex)
+  // 2단계: 정렬된 순서대로 마스킹된 텍스트에서 masked_value 찾기
+  let searchIndex = 0
 
-      if (position !== -1) {
-        matches.push({
-          start: position,
-          end: position + maskedValue.length,
-          decision
-        })
-        searchIndex = position + maskedValue.length
+  for (const { decision } of originalPositions) {
+    const maskedValue = (decision.masked_value || '***').replace(/O/g, '*')
+    const foundIndex = text.indexOf(maskedValue, searchIndex)
+
+    if (foundIndex !== -1) {
+      matches.push({
+        start: foundIndex,
+        end: foundIndex + maskedValue.length,
+        decision
+      })
+      console.log(`[매칭 성공] ${decision.pii_id}: "${maskedValue}" at position ${foundIndex}`)
+      searchIndex = foundIndex + maskedValue.length
+    } else {
+      console.error(`[매칭 실패] ${decision.pii_id}: "${maskedValue}" not found after position ${searchIndex}`)
+
+      // 전체 텍스트에서 찾아보기
+      const globalIndex = text.indexOf(maskedValue)
+      if (globalIndex !== -1) {
+        console.log(`💡 전체 텍스트에서는 발견됨! 위치: ${globalIndex} (현재 검색 위치: ${searchIndex})`)
       }
     }
   }
 
-  const filteredMatches = matches
   const parts: React.ReactNode[] = []
   let lastIndex = 0
 
-  filteredMatches.forEach((match, idx) => {
+  matches.sort((a, b) => a.start - b.start)
+
+  matches.forEach((match, idx) => {
+    // 매칭 전 일반 텍스트
     if (match.start > lastIndex) {
       parts.push(
         <span key={`text-${idx}`}>
@@ -220,7 +234,11 @@ function MaskedTextWithMetadata({ text, decisions, originalText }: {
     parts.push(
       <HoverCard key={`masked-${idx}`} openDelay={200} closeDelay={100}>
         <HoverCardTrigger asChild>
-          <span className="cursor-help text-primary px-0.5 rounded border-b border-primary/30 transition-colors font-medium" style={{ backgroundColor: 'hsl(168.4 83.8% 78.2% / 0.2)' } as React.CSSProperties} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'hsl(168.4 83.8% 78.2% / 0.3)'}>
+          <span 
+            className="cursor-help text-primary px-0.5 rounded border-b border-primary/30 transition-colors font-medium" 
+            style={{ backgroundColor: 'hsl(168.4 83.8% 78.2% / 0.2)' } as React.CSSProperties} 
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'hsl(168.4 83.8% 78.2% / 0.3)'}
+          >
             {text.substring(match.start, match.end)}
           </span>
         </HoverCardTrigger>
@@ -229,10 +247,10 @@ function MaskedTextWithMetadata({ text, decisions, originalText }: {
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-semibold flex items-center gap-1 text-slate-800">
                 {getRiskIcon(match.decision.risk_level)}
-                PII 상세 정보
+                PII 상세 정보 ({match.decision.pii_id})
               </h4>
               <Badge className={`text-xs ${getRiskBadgeColor(match.decision.risk_level)} shadow-none`}>
-                {match.decision.risk_level.toUpperCase()}
+                {match.decision.risk_level ? match.decision.risk_level.toUpperCase() : 'UNKNOWN'}
               </Badge>
             </div>
 
@@ -243,43 +261,17 @@ function MaskedTextWithMetadata({ text, decisions, originalText }: {
               </div>
               <div className="flex justify-between gap-2">
                 <span className="text-slate-500 shrink-0">원본 값:</span>
-                {/* 원본값은 민감하므로 붉은 계열 유지하되 톤다운 */}
                 <span className="font-mono text-red-600/80 text-right break-all">{match.decision.value}</span>
               </div>
               <div className="flex justify-between gap-2">
                 <span className="text-slate-500 shrink-0">마스킹 값:</span>
                 <span className="font-mono text-primary text-right break-all font-semibold">{match.decision.masked_value}</span>
               </div>
-              <div className="flex justify-between gap-2">
-                <span className="text-slate-500 shrink-0">마스킹 방법:</span>
-                <Badge variant="outline" className="text-[10px] h-5 px-1 bg-slate-50">
-                  {match.decision.masking_method === 'full' ? '전체' : '부분'}
-                </Badge>
-              </div>
             </div>
-
+            
             <div className="pt-2 border-t border-slate-100">
               <p className="text-xs font-medium mb-1 text-slate-700">마스킹 이유:</p>
               <p className="text-xs text-slate-500 leading-relaxed">{match.decision.reason}</p>
-            </div>
-
-            {match.decision.cited_guidelines && match.decision.cited_guidelines.length > 0 && (
-              <div className="pt-2 border-t border-slate-100">
-                <p className="text-xs font-medium mb-1 text-slate-700">적용된 규정:</p>
-                <ul className="text-xs text-slate-500 space-y-1">
-                  {match.decision.cited_guidelines.slice(0, 3).map((guideline, i) => (
-                    <li key={i} className="flex items-start gap-1">
-                      <span className="text-primary shrink-0">•</span>
-                      <span className="leading-relaxed">{guideline}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
-              <span className="text-slate-500">AI 신뢰도:</span>
-              <span className="font-medium text-primary">{(match.decision.confidence * 100).toFixed(0)}%</span>
             </div>
           </div>
         </HoverCardContent>

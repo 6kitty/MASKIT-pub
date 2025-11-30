@@ -13,7 +13,7 @@ from email.utils import encode_rfc2231
 from typing import Optional, List
 import base64
 
-from app.database.mongodb import get_kst_now
+from app.utils.datetime_utils import get_kst_now
 
 
 class SMTPEmailClient:

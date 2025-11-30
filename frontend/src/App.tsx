@@ -13,7 +13,7 @@ import { SentEmailDetailPage } from '@/pages/SentEmailDetailPage'
 import { ReceivedDetailPage } from '@/pages/ReceivedDetailPage' // ← 추가
 
 import { UserDashboardPage } from '@/pages/UserDashboardPage'
-import { AuditorDashboardPage } from '@/pages/AuditorDashboardPage'
+import AuditorDashboardPage from '@/pages/AuditorDashboardPage'
 import { SentEmailsPage } from '@/pages/SentEmailsPage'
 import { ReceivedEmailsPage } from '@/pages/ReceivedEmailsPage'
 import DecisionLogsPage from '@/pages/DecisionLogsPage'

@@ -4,7 +4,7 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime,timedelta
-from app.database.mongodb import get_kst_now
+from app.utils.datetime_utils import get_kst_now
 
 class AttachmentData(BaseModel):
     """첨부파일 데이터 모델"""
