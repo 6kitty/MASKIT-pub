@@ -518,14 +518,10 @@ export const SentEmailDetailPage: React.FC<SentEmailDetailPageProps> = ({
     <div className="container mx-auto max-w-7xl p-6 space-y-6">
       {/* 헤더 섹션 */}
       <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight text-slate-900">상세 분석 리포트</h2>
-          <p className="text-sm text-slate-500 mt-1">원본 데이터와 AI 마스킹 처리 결과를 비교 분석합니다.</p>
-        </div>
         {onBack && (
           <Button variant="outline" onClick={onBack} className="border-slate-200 text-slate-700 hover:bg-slate-50">
             <ArrowLeft className="mr-2 h-4 w-4" />
-            목록으로
+            뒤로 가기
           </Button>
         )}
       </div>
