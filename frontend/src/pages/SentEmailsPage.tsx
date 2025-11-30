@@ -73,16 +73,28 @@ export function SentEmailsPage({ onNavigate, onBack }: SentEmailsPageProps) {
       }
 
       const result = await response.json()
+      console.log('📧 보낸 메일 API 응답:', result)
+
       if (result.success && result.data) {
         // email_id를 _id로 매핑 (기존 코드와 호환성 유지)
-        const transformedEmails = result.data.map((email: any) => ({
-          ...email,
-          _id: email.email_id,  // email_id를 _id로 사용
-          to_email: email.to_emails?.[0] || '',  // 첫 번째 수신자
-          created_at: email.created_at,
-          attachments: email.attachments_summary || []
-        }))
+        const transformedEmails = result.data.map((email: any) => {
+          console.log('📎 이메일 첨부파일 정보:', {
+            email_id: email.email_id,
+            subject: email.subject,
+            attachments_summary: email.attachments_summary,
+            attachments: email.attachments
+          })
+
+          return {
+            ...email,
+            _id: email.email_id,  // email_id를 _id로 사용
+            to_email: email.to_emails?.[0] || '',  // 첫 번째 수신자
+            created_at: email.created_at,
+            attachments: email.attachments_summary || email.attachments || []
+          }
+        })
         setEmails(transformedEmails)
+        console.log('✅ 변환된 이메일 목록:', transformedEmails)
       } else {
         setEmails([])
       }

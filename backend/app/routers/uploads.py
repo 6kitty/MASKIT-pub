@@ -255,8 +255,22 @@ async def list_original_emails(
         # 첨부파일 필드명 변경 및 날짜 포맷 변환
         result_emails = []
         for email in emails:
-            if "attachments" in email:
-                email["attachments_summary"] = email.pop("attachments", [])
+            # 첨부파일 메타데이터 생성
+            if "attachments" in email and email["attachments"]:
+                # data 필드를 제외한 메타데이터만 포함
+                email["attachments_summary"] = [
+                    {
+                        "filename": att.get("filename"),
+                        "content_type": att.get("content_type"),
+                        "size": att.get("size")
+                    }
+                    for att in email["attachments"]
+                    if att.get("filename")  # filename이 있는 것만 포함
+                ]
+                email.pop("attachments", None)  # 원본 attachments 제거
+            else:
+                email["attachments_summary"] = []
+
             # created_at을 KST 문자열로 변환
             if "created_at" in email and email["created_at"]:
                 from app.utils.datetime_utils import utc_to_kst
@@ -379,16 +393,16 @@ async def get_masked_email(
 
         # 첨부파일 제외 옵션
         if not include_attachments and "masked_attachments" in masked_data:
-            # 메타데이터만 포함
-            masked_data["attachments_summary"] = [
+            # 메타데이터만 포함 (masked_attachments 필드명 유지하되 data 제외)
+            masked_data["masked_attachments"] = [
                 {
-                    "filename": att["filename"],
-                    "content_type": att["content_type"],
-                    "size": att["size"]
+                    "filename": att.get("filename"),
+                    "content_type": att.get("content_type"),
+                    "size": att.get("size")
                 }
                 for att in masked_data["masked_attachments"]
+                if att.get("filename")  # filename이 있는 것만 포함
             ]
-            masked_data.pop("masked_attachments", None)
 
         return {
             "success": True,

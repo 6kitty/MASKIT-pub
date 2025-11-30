@@ -323,7 +323,17 @@ export const SentEmailDetailPage: React.FC<SentEmailDetailPageProps> = ({
       if (!emailResponse.ok) throw new Error('원본 이메일을 불러오는데 실패했습니다.')
 
       const emailResult = await emailResponse.json()
+      console.log('📧 [SentEmailDetail] 원본 이메일 API 응답:', emailResult)
+
       if (emailResult.success && emailResult.data) {
+        // attachments_summary가 있으면 attachments로 변환
+        if (emailResult.data.attachments_summary) {
+          emailResult.data.attachments = emailResult.data.attachments_summary
+        }
+        console.log('📎 [SentEmailDetail] 첨부파일 정보:', {
+          attachments: emailResult.data.attachments,
+          attachments_summary: emailResult.data.attachments_summary
+        })
         setOriginalEmail(emailResult.data)
         // 첨부파일은 필요 시 지연 로딩
       }
@@ -335,7 +345,13 @@ export const SentEmailDetailPage: React.FC<SentEmailDetailPageProps> = ({
 
       if (maskedResponse.ok) {
         const maskedResult = await maskedResponse.json()
+        console.log('🎭 [SentEmailDetail] 마스킹 이메일 API 응답:', maskedResult)
+
         if (maskedResult.success && maskedResult.data) {
+          console.log('📎 [SentEmailDetail] 마스킹 첨부파일 정보:', {
+            masked_attachments: maskedResult.data.masked_attachments,
+            masked_attachments_summary: maskedResult.data.masked_attachments_summary
+          })
           setMaskedEmail(maskedResult.data)
           hasMaskedData = true
           // 첨부파일은 필요 시 지연 로딩
