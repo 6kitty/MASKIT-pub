@@ -315,8 +315,8 @@ export const SentEmailDetailPage: React.FC<SentEmailDetailPageProps> = ({
     try {
       const token = localStorage.getItem('auth_token')
 
-      // 첨부파일 제외하고 메타데이터만 로드 (빠른 로딩)
-      const emailResponse = await fetch(`${API_BASE_URL}/api/v1/files/original_emails/${emailId}?include_attachments=false`, {
+      // 원본 이메일 로드 (첨부파일 포함)
+      const emailResponse = await fetch(`${API_BASE_URL}/api/v1/files/original_emails/${emailId}?include_attachments=true`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
 
@@ -330,16 +330,34 @@ export const SentEmailDetailPage: React.FC<SentEmailDetailPageProps> = ({
         if (emailResult.data.attachments_summary) {
           emailResult.data.attachments = emailResult.data.attachments_summary
         }
-        console.log('📎 [SentEmailDetail] 첨부파일 정보:', {
-          attachments: emailResult.data.attachments,
-          attachments_summary: emailResult.data.attachments_summary
-        })
+
+        // 첨부파일 Blob URL 생성 (원본)
+        if (emailResult.data.attachments && emailResult.data.attachments.length > 0) {
+          const urlMap = new Map<string, string>()
+          for (const attachment of emailResult.data.attachments) {
+            if (attachment.data) {
+              try {
+                const binaryString = atob(attachment.data)
+                const bytes = new Uint8Array(binaryString.length)
+                for (let i = 0; i < binaryString.length; i++) {
+                  bytes[i] = binaryString.charCodeAt(i)
+                }
+                const blob = new Blob([bytes], { type: attachment.content_type })
+                const url = URL.createObjectURL(blob)
+                urlMap.set(attachment.filename, url)
+              } catch (error) {
+                console.error(`원본 첨부파일 변환 실패: ${attachment.filename}`, error)
+              }
+            }
+          }
+          setOriginalAttachmentUrls(urlMap)
+        }
+
         setOriginalEmail(emailResult.data)
-        // 첨부파일은 필요 시 지연 로딩
       }
 
-      // 마스킹 이메일도 첨부파일 제외하고 로드
-      const maskedResponse = await fetch(`${API_BASE_URL}/api/v1/files/masked_emails/${emailId}?include_attachments=false`, {
+      // 마스킹 이메일 로드 (첨부파일 포함)
+      const maskedResponse = await fetch(`${API_BASE_URL}/api/v1/files/masked_emails/${emailId}?include_attachments=true`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
 
@@ -348,13 +366,30 @@ export const SentEmailDetailPage: React.FC<SentEmailDetailPageProps> = ({
         console.log('🎭 [SentEmailDetail] 마스킹 이메일 API 응답:', maskedResult)
 
         if (maskedResult.success && maskedResult.data) {
-          console.log('📎 [SentEmailDetail] 마스킹 첨부파일 정보:', {
-            masked_attachments: maskedResult.data.masked_attachments,
-            masked_attachments_summary: maskedResult.data.masked_attachments_summary
-          })
+          // 마스킹 첨부파일 Blob URL 생성
+          if (maskedResult.data.masked_attachments && maskedResult.data.masked_attachments.length > 0) {
+            const urlMap = new Map<string, string>()
+            for (const attachment of maskedResult.data.masked_attachments) {
+              if (attachment.data) {
+                try {
+                  const binaryString = atob(attachment.data)
+                  const bytes = new Uint8Array(binaryString.length)
+                  for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i)
+                  }
+                  const blob = new Blob([bytes], { type: attachment.content_type })
+                  const url = URL.createObjectURL(blob)
+                  urlMap.set(attachment.filename, url)
+                } catch (error) {
+                  console.error(`마스킹 첨부파일 변환 실패: ${attachment.filename}`, error)
+                }
+              }
+            }
+            setMaskedAttachmentUrls(urlMap)
+          }
+
           setMaskedEmail(maskedResult.data)
           hasMaskedData = true
-          // 첨부파일은 필요 시 지연 로딩
         }
       }
 
@@ -366,89 +401,6 @@ export const SentEmailDetailPage: React.FC<SentEmailDetailPageProps> = ({
       if (!hasMaskedData) {
         setActiveView('original')
       }
-    }
-  }
-
-  // 첨부파일 지연 로딩 함수
-  const loadAttachments = async (isMasked: boolean = false) => {
-    try {
-      const token = localStorage.getItem('auth_token')
-
-      if (isMasked && maskedEmail && !maskedAttachmentUrls.size) {
-        // 마스킹 첨부파일 로드
-        const response = await fetch(`${API_BASE_URL}/api/v1/files/masked_emails/${emailId}?include_attachments=true`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        })
-
-        if (response.ok) {
-          const result = await response.json()
-          if (result.success && result.data?.masked_attachments) {
-            const urlMap = new Map<string, string>()
-            for (const attachment of result.data.masked_attachments) {
-              try {
-                // Base64 디코딩 최적화 (청크 처리)
-                const binaryString = atob(attachment.data)
-                const byteArrays = []
-                const chunkSize = 512 * 1024
-
-                for (let offset = 0; offset < binaryString.length; offset += chunkSize) {
-                  const chunk = binaryString.slice(offset, offset + chunkSize)
-                  const byteNumbers = new Array(chunk.length)
-                  for (let i = 0; i < chunk.length; i++) {
-                    byteNumbers[i] = chunk.charCodeAt(i)
-                  }
-                  byteArrays.push(new Uint8Array(byteNumbers))
-                }
-
-                const blob = new Blob(byteArrays, { type: attachment.content_type })
-                const url = URL.createObjectURL(blob)
-                urlMap.set(attachment.filename, url)
-              } catch (error) {
-                console.error(`마스킹 첨부파일 로드 실패: ${attachment.filename}`, error)
-              }
-            }
-            setMaskedAttachmentUrls(urlMap)
-          }
-        }
-      } else if (!isMasked && originalEmail && !originalAttachmentUrls.size) {
-        // 원본 첨부파일 로드
-        const response = await fetch(`${API_BASE_URL}/api/v1/files/original_emails/${emailId}?include_attachments=true`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        })
-
-        if (response.ok) {
-          const result = await response.json()
-          if (result.success && result.data?.attachments) {
-            const urlMap = new Map<string, string>()
-            for (const attachment of result.data.attachments) {
-              try {
-                // Base64 디코딩 최적화 (청크 처리)
-                const binaryString = atob(attachment.data)
-                const byteArrays = []
-                const chunkSize = 512 * 1024
-
-                for (let offset = 0; offset < binaryString.length; offset += chunkSize) {
-                  const chunk = binaryString.slice(offset, offset + chunkSize)
-                  const byteNumbers = new Array(chunk.length)
-                  for (let i = 0; i < chunk.length; i++) {
-                    byteNumbers[i] = chunk.charCodeAt(i)
-                  }
-                  byteArrays.push(new Uint8Array(byteNumbers))
-                }
-
-                const blob = new Blob(byteArrays, { type: attachment.content_type })
-                const url = URL.createObjectURL(blob)
-                urlMap.set(attachment.filename, url)
-              } catch (error) {
-                console.error(`원본 첨부파일 로드 실패: ${attachment.filename}`, error)
-              }
-            }
-            setOriginalAttachmentUrls(urlMap)
-          }
-        }
-      }
-    } catch (error) {
-      console.error('첨부파일 로드 오류:', error)
     }
   }
 
@@ -479,18 +431,11 @@ export const SentEmailDetailPage: React.FC<SentEmailDetailPageProps> = ({
   const renderAttachment = (attachment: AttachmentInfo, urlMap: Map<string, string>, isMasked: boolean = false) => {
     const url = urlMap.get(attachment.filename)
 
-    // 첨부파일이 아직 로드되지 않았으면 로드 버튼 표시
+    // URL이 없으면 로딩 중 메시지 표시
     if (!url) {
       return (
-        <div className="text-center py-4">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => loadAttachments(isMasked)}
-            className="text-xs"
-          >
-            첨부파일 보기
-          </Button>
+        <div className="text-center py-4 text-sm text-slate-500">
+          첨부파일 로딩 중...
         </div>
       )
     }
