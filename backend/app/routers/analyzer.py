@@ -1,15 +1,18 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from typing import Dict, Any, List, Optional
 from ..utils.recognizer_engine import recognize_pii_in_text
 from ..utils.rag_integration import get_rag_engine
 from ..database.mongodb import get_db
+from ..auth.auth_utils import get_current_user  # ✅ 추가
+from ..audit.logger import AuditLogger  # ✅ 추가
+from ..audit.models import AuditEventType, AuditSeverity  # ✅ 추가
 
 router = APIRouter()
 
 class EmailContext(BaseModel):
     """이메일 맥락 정보"""
-    sender_type: str = "internal"  # internal, external_customer, external_partner
+    sender_type: str = "internal"
     receiver_type: str = "external_customer"
     purpose: str = "일반 업무"
     has_consent: bool = False
@@ -17,13 +20,13 @@ class EmailContext(BaseModel):
 class TextAnalysisRequest(BaseModel):
     text_content: str
     user_request: str = "default"
-    ocr_data: Optional[Dict] = None  # OCR 좌표 데이터 추가
-    email_context: Optional[EmailContext] = None  # 이메일 맥락 정보 추가
-    enable_rag: bool = True  # RAG 활성화 여부
+    ocr_data: Optional[Dict] = None
+    email_context: Optional[EmailContext] = None
+    enable_rag: bool = True
 
 class PIICoordinate(BaseModel):
     pageIndex: int
-    bbox: List[int]  # [x1, y1, x2, y2]
+    bbox: List[int]
     field_text: str
 
 class PIIEntity(BaseModel):
@@ -32,11 +35,11 @@ class PIIEntity(BaseModel):
     score: float
     start_char: int
     end_char: int
-    coordinates: Optional[List[PIICoordinate]] = None  # OCR 좌표 정보 추가
+    coordinates: Optional[List[PIICoordinate]] = None
 
 class MaskingDecision(BaseModel):
     """마스킹 결정 정보"""
-    action: str  # keep, mask_partial, mask_full, block
+    action: str
     reasoning: str
     referenced_guides: List[str]
     referenced_laws: List[str]
@@ -61,60 +64,48 @@ class TextAnalysisWithRAGResponse(BaseModel):
 async def analyze_text(request: TextAnalysisRequest, db = Depends(get_db)):
     """
     추출된 텍스트에서 PII를 분석하고 탐지합니다.
-    OCR 데이터가 있으면 좌표 정보도 함께 반환합니다.
-    커스텀 엔티티도 MongoDB에서 자동 로드됩니다.
     """
-    # OCR 데이터와 DB 클라이언트를 포함하여 텍스트 분석 로직 호출
     analysis_result = await recognize_pii_in_text(
         request.text_content,
         request.ocr_data,
         db_client=db
     )
-
     return analysis_result
 
 @router.post("/analyze/text-with-rag", response_model=TextAnalysisWithRAGResponse)
-async def analyze_text_with_rag(request: TextAnalysisRequest, db = Depends(get_db)):
+async def analyze_text_with_rag(
+    analysis_request: TextAnalysisRequest,
+    http_request: Request,  # ✅ 이름 변경
+    current_user: dict = Depends(get_current_user),  # ✅ 추가
+    db = Depends(get_db)
+):
     """
     RAG 기반 PII 분석 및 마스킹 결정
-
-    1. PII 탐지 (규칙 기반 + NER)
-    2. RAG 검색 (애플리케이션 가이드, 법률, 정책)
-    3. 마스킹 결정 (법령 기반)
-
-    Args:
-        request: 분석 요청 (텍스트, 맥락 정보, RAG 활성화 여부)
-
-    Returns:
-        마스킹 결정이 포함된 PII 분석 결과
     """
     # 1. PII 탐지
     analysis_result = await recognize_pii_in_text(
-        request.text_content,
-        request.ocr_data,
+        analysis_request.text_content,
+        analysis_request.ocr_data,
         db_client=db
     )
 
     pii_entities = analysis_result.get("pii_entities", [])
 
     # 2. RAG 기반 마스킹 결정
-    if request.enable_rag and pii_entities:
+    if analysis_request.enable_rag and pii_entities:
         rag_engine = get_rag_engine()
 
-        # 맥락 정보를 딕셔너리로 변환
         context = None
-        if request.email_context:
+        if analysis_request.email_context:
             context = {
-                "sender_type": request.email_context.sender_type,
-                "receiver_type": request.email_context.receiver_type,
-                "purpose": request.email_context.purpose,
-                "has_consent": request.email_context.has_consent
+                "sender_type": analysis_request.email_context.sender_type,
+                "receiver_type": analysis_request.email_context.receiver_type,
+                "purpose": analysis_request.email_context.purpose,
+                "has_consent": analysis_request.email_context.has_consent
             }
 
-        # RAG 기반 마스킹 결정 획득
         rag_result = rag_engine.get_masking_decisions(pii_entities, context)
 
-        # PII 엔티티에 결정 정보 병합
         entities_with_decisions = []
         for decision_data in rag_result.get("decisions", []):
             entity = decision_data["entity"]
@@ -132,6 +123,29 @@ async def analyze_text_with_rag(request: TextAnalysisRequest, db = Depends(get_d
             )
             entities_with_decisions.append(entity_with_decision)
 
+        # ✅ 감사 로그 기록 (RAG 마스킹 결정)
+        try:
+            masked_count = sum(1 for e in entities_with_decisions if e.masking_decision and e.masking_decision.action != 'keep')
+            
+            await AuditLogger.log(
+                event_type=AuditEventType.MASKING_DECISION,
+                user_email=current_user["email"],
+                user_role=current_user.get("role", "user"),
+                action=f"RAG 마스킹 분석: {masked_count}/{len(pii_entities)}개 마스킹 권장",
+                resource_type="analysis",
+                details={
+                    "total_pii": len(pii_entities),
+                    "masked_pii": masked_count,
+                    "context": context,
+                    "rag_enabled": rag_result.get("rag_enabled", False)
+                },
+                request=http_request,
+                success=True,
+                severity=AuditSeverity.INFO
+            )
+        except Exception as log_error:
+            print(f"⚠️ RAG 분석 감사 로그 실패: {log_error}")
+
         return TextAnalysisWithRAGResponse(
             full_text=analysis_result.get("full_text", ""),
             pii_entities=entities_with_decisions,
@@ -139,7 +153,6 @@ async def analyze_text_with_rag(request: TextAnalysisRequest, db = Depends(get_d
             warnings=rag_result.get("warnings", [])
         )
     else:
-        # RAG 비활성화 또는 PII 없음
         entities_with_decisions = [
             PIIEntityWithDecision(**entity, masking_decision=None)
             for entity in pii_entities

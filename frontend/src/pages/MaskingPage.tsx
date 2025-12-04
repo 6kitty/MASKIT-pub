@@ -1022,6 +1022,8 @@ export const MaskingPage: React.FC<MaskingPageProps> = ({
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`, // ✅ 추가
+
           },
           body: JSON.stringify(piiItemsForBackend)
         })
@@ -1087,6 +1089,7 @@ export const MaskingPage: React.FC<MaskingPageProps> = ({
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
+              'Authorization': `Bearer ${localStorage.getItem('auth_token')}`, // ✅ 추가
             },
             body: JSON.stringify({
               email_id: emailData.email_id,
