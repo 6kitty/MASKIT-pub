@@ -16,7 +16,7 @@ from datetime import datetime,timedelta
 import hashlib
 import fitz  # PyMuPDF
 from dotenv import load_dotenv
-from app.auth.auth_utils import get_current_policy_admin
+from app.auth.auth_utils import get_current_policy_admin, get_current_user
 from app.audit.logger import AuditLogger
 from app.audit.models import AuditEventType, AuditSeverity
 from app.database.mongodb import get_db
@@ -368,7 +368,8 @@ async def list_policies(
     skip: int = 0,
     limit: int = 50,
     authority: str = None,
-    db = Depends(get_db)
+    db = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """정책 목록 조회"""
     try:
@@ -493,7 +494,8 @@ async def load_policy_schemas_from_staging():
 async def get_policy_schemas(
     skip: int = 0,
     limit: int = 50,
-    refresh_cache: bool = False
+    refresh_cache: bool = False,
+    current_user: dict = Depends(get_current_user)
 ):
     """
     정책 스키마 목록 조회 (staging 디렉토리에서 로드)
@@ -532,7 +534,8 @@ async def get_policy_schemas(
 @router.get("/{policy_id}")
 async def get_policy_detail(
     policy_id: str,
-    db = Depends(get_db)
+    db = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """정책 상세 조회"""
     try:
@@ -872,7 +875,7 @@ async def update_policy_guidelines(
         )
 
 @router.get("/stats/summary")
-async def get_policy_stats(db = Depends(get_db)):
+async def get_policy_stats(db = Depends(get_db), current_user: dict = Depends(get_current_user)):
     """정책 통계 조회"""
     try:
         # 총 정책 수
@@ -914,7 +917,7 @@ async def get_policy_stats(db = Depends(get_db)):
 
 
 @router.get("/tasks/{task_id}/status")
-async def get_background_task_status(task_id: str):
+async def get_background_task_status(task_id: str, current_user: dict = Depends(get_current_user)):
     """백그라운드 작업 상태 조회"""
     # 오래된 작업 정리
     clear_old_tasks()
@@ -934,7 +937,8 @@ async def get_background_task_status(task_id: str):
 async def batch_process_policies(
     policy_ids: List[str],
     background_tasks: BackgroundTasks,
-    db = Depends(get_db)
+    db = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """
     여러 정책을 배치로 백그라운드 처리
@@ -990,7 +994,7 @@ async def batch_process_policies(
 
 
 @router.get("/tasks/all")
-async def get_all_task_status():
+async def get_all_task_status(current_user: dict = Depends(get_current_user)):
     """모든 백그라운드 작업 상태 조회"""
     from app.policy.background_tasks import task_status
 
@@ -1181,7 +1185,7 @@ async def sync_policies_to_vector_store(
 
 
 @router.get("/sync/status")
-async def get_sync_status(db = Depends(get_db)):
+async def get_sync_status(db = Depends(get_db), current_user: dict = Depends(get_current_user)):
     """
     MongoDB와 OpenAI Vector Store 동기화 상태 확인
     """

@@ -12,6 +12,7 @@ import uuid
 from app.database.mongodb import get_db
 from app.utils.datetime_utils import get_kst_now
 from app.models.email import AttachmentData, OriginalEmailData
+from app.auth.auth_utils import get_current_user
 
 router = APIRouter()
 
@@ -32,7 +33,8 @@ async def upload_email(
     subject: str = Form(...),
     original_body: str = Form(...),
     attachments: List[UploadFile] = File([]),
-    db = Depends(get_db)
+    db = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     print(f"📧 이메일 업로드: {from_email} → {to_email} | 첨부파일: {len(attachments)}개")
 
@@ -95,7 +97,7 @@ async def upload_email(
         }
 
 @router.get("/files", response_model=list[FileItem])
-def get_files():
+def get_files(current_user: dict = Depends(get_current_user)):
     files_list = []
     
     for i, filename in enumerate(os.listdir(UPLOAD_DIR)):
@@ -125,7 +127,7 @@ def get_files():
     return files_list
 
 @router.get("/files/watch")
-async def watch_files():
+async def watch_files(current_user: dict = Depends(get_current_user)):
     """Server-Sent Events를 사용한 파일 변경 감시"""
     async def event_generator():
         last_files = set()
@@ -149,7 +151,8 @@ async def watch_files():
 async def get_original_email(
     email_id: str,
     include_attachments: bool = True,
-    db = Depends(get_db)
+    db = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """
     저장된 원본 이메일 조회
@@ -219,7 +222,8 @@ async def list_original_emails(
     skip: int = 0,
     limit: int = 20,
     from_email: str = None,
-    db = Depends(get_db)
+    db = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """
     원본 이메일 목록 조회
@@ -300,7 +304,7 @@ async def list_original_emails(
 
 
 @router.get("/original_emails/{email_id}/attachment/{filename}")
-async def download_attachment(email_id: str, filename: str, db = Depends(get_db)):
+async def download_attachment(email_id: str, filename: str, db = Depends(get_db), current_user: dict = Depends(get_current_user)):
     """
     원본 이메일의 첨부파일 다운로드
     - email_id: 이메일 고유 ID
@@ -356,7 +360,8 @@ async def download_attachment(email_id: str, filename: str, db = Depends(get_db)
 async def get_masked_email(
     email_id: str,
     include_attachments: bool = True,
-    db = Depends(get_db)
+    db = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """
     저장된 마스킹 이메일 조회

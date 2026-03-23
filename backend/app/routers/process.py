@@ -11,6 +11,7 @@ from ..routers.ocr_needed import check_ocr_needed, PreflightCheckRequest
 from ..routers.ocr import extract_ocr
 from ..utils.recognizer_engine import recognize_pii_in_text
 from ..database.mongodb import get_db
+from ..auth.auth_utils import get_current_user
 
 import smtplib
 from email.mime.multipart import MIMEMultipart
@@ -23,7 +24,7 @@ from typing import List
 router = APIRouter()
 
 @router.post("/documents")
-async def process_documents(db = Depends(get_db)):
+async def process_documents(db = Depends(get_db), current_user: dict = Depends(get_current_user)):
     file_list = get_files()
     results = []
 
@@ -137,7 +138,7 @@ def clear_uploads_folder():
         return False
 
 @router.post("/approve_and_send")
-async def approve_and_send_email(request: ApproveRequest):
+async def approve_and_send_email(request: ApproveRequest, current_user: dict = Depends(get_current_user)):
     if not SENDER_APP_PASSWORD:
         return {"error": "네이버 앱 비밀번호가 서버 환경 변수에 설정되지 않았습니다."}
     

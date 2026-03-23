@@ -268,7 +268,8 @@ async def create_entity(
 async def list_entities(
     category: str = None,
     is_active: bool = None,
-    db = Depends(get_db)
+    db = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """엔티티 목록 조회"""
     try:
@@ -309,7 +310,7 @@ async def list_entities(
 
 
 @router.get("/categories")
-async def get_categories(db = Depends(get_db)):
+async def get_categories(db = Depends(get_db), current_user: dict = Depends(get_current_user)):
     """카테고리 목록 조회"""
     try:
         # 카테고리별 집계
@@ -342,7 +343,7 @@ async def get_categories(db = Depends(get_db)):
 
 
 @router.get("/recognizers")
-async def get_recognizers():
+async def get_recognizers(current_user: dict = Depends(get_current_user)):
     """Recognizer 모듈 정보 조회"""
     try:
         recognizers = load_all_recognizers()
@@ -360,7 +361,7 @@ async def get_recognizers():
 
 
 @router.get("/recognizers/{entity_type}")
-async def get_recognizer_detail(entity_type: str):
+async def get_recognizer_detail(entity_type: str, current_user: dict = Depends(get_current_user)):
     """특정 Entity Type의 Recognizer 상세 정보"""
     try:
         recognizers = load_all_recognizers()
@@ -383,7 +384,8 @@ async def get_recognizer_detail(entity_type: str):
 @router.get("/{entity_id}")
 async def get_entity_detail(
     entity_id: str,
-    db = Depends(get_db)
+    db = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """엔티티 상세 조회"""
     try:

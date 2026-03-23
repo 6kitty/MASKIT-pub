@@ -1,0 +1,146 @@
+name: Security SAST
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'backend/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'backend/**'
+  workflow_dispatch:  # 수동 실행 가능
+
+jobs:
+  sast:
+    name: Static Application Security Testing
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Python 환경 (ML 의존성 제외한 최소 설치) ──────────────
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install security tools only
+        run: |
+          pip install --upgrade pip
+          pip install bandit pip-audit
+
+      # ── 1단계: 의존성 CVE 스캔 ───────────────────────────────
+      - name: Dependency CVE Scan (pip-audit)
+        run: |
+          pip-audit -r requirements_basic.txt \
+            --format json \
+            --output pip-audit-report.json || true
+          pip-audit -r requirements_basic.txt || true
+        continue-on-error: true  # 취약점 있어도 다음 단계 진행
+
+      # ── 2단계: Python 코드 정적 취약점 분석 (bandit) ─────────
+      - name: Python SAST (bandit)
+        run: |
+          bandit -r app/ \
+            --severity-level medium \
+            --confidence-level medium \
+            --format json \
+            --output bandit-report.json || true
+          bandit -r app/ \
+            --severity-level medium \
+            --confidence-level medium || true
+        continue-on-error: true
+
+      # ── 3단계: 커스텀 인증 커버리지 분석 ────────────────────
+      - name: Auth Coverage Check (custom SAST)
+        run: |
+          python tests/security/check_auth_coverage.py \
+            --app-dir app \
+            --format json > auth-coverage-report.json
+          python tests/security/check_auth_coverage.py \
+            --app-dir app
+
+      - name: Fail if auth coverage below threshold
+        run: |
+          python - <<'EOF'
+          import json, sys
+          with open("auth-coverage-report.json") as f:
+              r = json.load(f)
+          missing = r.get("missing_auth", 0)
+          total = r.get("total", 1)
+          coverage = r.get("coverage_pct", 0)
+          print(f"인증 커버리지: {coverage}% ({total - missing}/{total})")
+          # Critical/High 심각도 엔드포인트에 인증 누락 시 실패
+          critical_missing = [
+              e for e in r.get("missing_endpoints", [])
+              if any(k in e["path"] for k in [
+                  "email", "upload", "send", "approve",
+                  "masked", "original", "attachment"
+              ])
+          ]
+          if critical_missing:
+              print(f"[FAIL] Critical 경로에 인증 누락: {len(critical_missing)}개")
+              for e in critical_missing:
+                  print(f"  {e['method']} {e['path']} ({e['file']}:{e['line']})")
+              sys.exit(1)
+          print("[PASS] Critical 경로 인증 커버리지 OK")
+          EOF
+
+      # ── 리포트 아티팩트 저장 ─────────────────────────────────
+      - name: Upload security reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports-${{ github.run_number }}
+          path: |
+            backend/bandit-report.json
+            backend/pip-audit-report.json
+            backend/auth-coverage-report.json
+          retention-days: 30
+
+      # ── PR 코멘트: 인증 커버리지 요약 ────────────────────────
+      - name: Comment auth coverage on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let report = {};
+            try {
+              report = JSON.parse(fs.readFileSync('backend/auth-coverage-report.json', 'utf8'));
+            } catch (e) {
+              return;
+            }
+            const missing = report.missing_auth || 0;
+            const total = report.total || 0;
+            const coverage = report.coverage_pct || 0;
+            const status = missing === 0 ? '✅' : '⚠️';
+            const body = [
+              `## ${status} Security SAST 결과`,
+              '',
+              `| 항목 | 수치 |`,
+              `|------|------|`,
+              `| 총 엔드포인트 | ${total}개 |`,
+              `| 인증 커버리지 | ${coverage}% |`,
+              `| 인증 누락 | ${missing}개 |`,
+              '',
+              missing > 0
+                ? `### 인증 누락 엔드포인트\n` +
+                  report.missing_endpoints.slice(0, 10).map(
+                    e => `- \`${e.method} ${e.path}\` (${e.file}:${e.line})`
+                  ).join('\n')
+                : '모든 엔드포인트에 인증이 적용되어 있습니다.',
+            ].join('\n');
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body,
+            });

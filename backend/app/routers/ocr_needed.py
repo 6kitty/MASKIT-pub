@@ -1,8 +1,9 @@
 # app/routers/ocr_needed.py
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from typing import Optional
+from ..auth.auth_utils import get_current_user
 
 router = APIRouter()
 
@@ -20,7 +21,7 @@ OCR_REQUIRED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".pdf", ".he
 
 # 4. API 엔드포인트 정의
 @router.post("/check-ocr", response_model=PreflightCheckResponse)
-def check_ocr_needed(request: PreflightCheckRequest):
+def check_ocr_needed(request: PreflightCheckRequest, current_user: dict = Depends(get_current_user)):
     """
     파일 이름을 분석하여 OCR이 필요한지 여부를 반환합니다.
     이미지나 PDF 파일은 OCR이 필요합니다.

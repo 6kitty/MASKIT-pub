@@ -61,7 +61,7 @@ class TextAnalysisWithRAGResponse(BaseModel):
     warnings: List[str] = []
 
 @router.post("/analyze/text", response_model=TextAnalysisResponse)
-async def analyze_text(request: TextAnalysisRequest, db = Depends(get_db)):
+async def analyze_text(request: TextAnalysisRequest, db = Depends(get_db), current_user: dict = Depends(get_current_user)):
     """
     추출된 텍스트에서 PII를 분석하고 탐지합니다.
     """

@@ -324,7 +324,8 @@ async def save_masked_email(
 @router.get("/masking/masked-email/{email_id}")
 async def get_masked_email(
     email_id: str,
-    db = Depends(get_db)
+    db = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
 ):
     """
     MongoDB에서 마스킹된 이메일 조회

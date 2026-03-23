@@ -262,7 +262,7 @@ async def search_with_assistant(query: str, context: Dict = None) -> List[Dict]:
 
 
 @router.get("/guides/grouped")
-async def get_guides_grouped():
+async def get_guides_grouped(current_user: dict = Depends(get_current_user)):
     """source_document로 그룹화된 모든 가이드 조회"""
     try:
         grouped = load_all_guides()
@@ -295,7 +295,7 @@ async def get_guides_grouped():
 
 
 @router.get("/guides/by-source/{source_document}")
-async def get_guides_by_source(source_document: str):
+async def get_guides_by_source(source_document: str, current_user: dict = Depends(get_current_user)):
     """특정 source_document의 가이드 조회"""
     try:
         grouped = load_all_guides()
@@ -315,7 +315,7 @@ async def get_guides_by_source(source_document: str):
 
 
 @router.get("/guides/{guide_id}")
-async def get_guide_by_id(guide_id: str):
+async def get_guide_by_id(guide_id: str, current_user: dict = Depends(get_current_user)):
     """특정 가이드 조회"""
     try:
         grouped = load_all_guides()
@@ -337,7 +337,7 @@ async def get_guide_by_id(guide_id: str):
 
 
 @router.post("/guides")
-async def create_guide(guide_data: PolicyGuideCreate):
+async def create_guide(guide_data: PolicyGuideCreate, current_user: dict = Depends(get_current_user)):
     """새 가이드 생성"""
     try:
         # guide_id 생성
@@ -398,7 +398,7 @@ async def create_guide(guide_data: PolicyGuideCreate):
 
 
 @router.put("/guides/{guide_id}")
-async def update_guide(guide_id: str, guide_data: PolicyGuideUpdate):
+async def update_guide(guide_id: str, guide_data: PolicyGuideUpdate, current_user: dict = Depends(get_current_user)):
     """가이드 업데이트"""
     try:
         grouped = load_all_guides()
@@ -446,7 +446,7 @@ async def update_guide(guide_id: str, guide_data: PolicyGuideUpdate):
 
 
 @router.delete("/guides/{guide_id}")
-async def delete_guide(guide_id: str):
+async def delete_guide(guide_id: str, current_user: dict = Depends(get_current_user)):
     """가이드 삭제"""
     try:
         grouped = load_all_guides()
@@ -485,7 +485,7 @@ async def delete_guide(guide_id: str):
 
 
 @router.get("/stats")
-async def get_vectordb_stats():
+async def get_vectordb_stats(current_user: dict = Depends(get_current_user)):
     """VectorDB 통계"""
     try:
         grouped = load_all_guides()
